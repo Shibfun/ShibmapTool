@@ -219,34 +219,52 @@
                 document.getElementById('error').style.display = 'block';
                 return false;
             }
-            web3 = new Web3('https://www.shibrpc.com');
-            account = web3.eth.accounts.privateKeyToAccount(privateKey);
-            web3.eth.accounts.wallet.add(account);
-            contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
-            return true;
+            try {
+                web3 = new Web3('https://www.shibrpc.com');
+                account = web3.eth.accounts.privateKeyToAccount(privateKey);
+                web3.eth.accounts.wallet.add(account);
+                contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                return true;
+            } catch (error) {
+                document.getElementById('error').textContent = "Failed to connect to Shibarium RPC: " + error.message;
+                document.getElementById('error').style.display = 'block';
+                return false;
+            }
         }
 
         async function findNextAvailableGroup() {
-            const currentBlock = await web3.eth.getBlockNumber();
-            const maxGroupId = Math.floor(currentBlock / 400);
-            for (let groupId = 0; groupId <= maxGroupId; groupId++) {
-                const isMinted = await contract.methods.mintedGroups(groupId).call();
-                if (!isMinted) {
-                    const startBlock = groupId * 400 + 1;
-                    const endBlock = startBlock + 399;
-                    return { groupId, startBlock, endBlock, minted: false };
+            try {
+                const currentBlock = await web3.eth.getBlockNumber();
+                const maxGroupId = Math.floor(currentBlock / 400);
+                for (let groupId = 0; groupId <= maxGroupId; groupId++) {
+                    const isMinted = await contract.methods.mintedGroups(groupId).call();
+                    if (!isMinted) {
+                        const startBlock = groupId * 400 + 1;
+                        const endBlock = startBlock + 399;
+                        return { groupId, startBlock, endBlock, minted: false };
+                    }
                 }
+                return null;
+            } catch (error) {
+                document.getElementById('error').textContent = "Failed to find available group: " + error.message;
+                document.getElementById('error').style.display = 'block';
+                return null;
             }
-            return null;
         }
 
         async function fetchBlockData(blockNumber) {
-            const block = await web3.eth.getBlock(blockNumber);
-            const txCount = block.transactions.length;
-            return {
-                blockNumber: blockNumber,
-                txCount: Math.min(txCount, 500)
-            };
+            try {
+                const block = await web3.eth.getBlock(blockNumber);
+                const txCount = block.transactions.length;
+                return {
+                    blockNumber: blockNumber,
+                    txCount: Math.min(txCount, 500)
+                };
+            } catch (error) {
+                document.getElementById('error').textContent = `Failed to fetch block ${blockNumber}: ${error.message}`;
+                document.getElementById('error').style.display = 'block';
+                return { blockNumber, txCount: 0 };
+            }
         }
 
         async function startMinting() {
@@ -272,6 +290,7 @@
             const statusDiv = document.getElementById('status');
             const errorDiv = document.getElementById('error');
             const mintLogDiv = document.getElementById('mintLog');
+            const startButton = document.querySelector('.input-container button');
 
             statusDiv.textContent = "Finding next available block group...";
             const group = await findNextAvailableGroup();
@@ -279,7 +298,7 @@
                 errorDiv.textContent = "No available block groups to mint";
                 errorDiv.style.display = 'block';
                 statusDiv.style.display = 'none';
-                document.querySelector('.input-container button').disabled = false;
+                startButton.disabled = false;
                 return;
             }
 

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shibmap</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Montserrat', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            color: #fff;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 48px;
+            color: #ff8c00;
+            text-shadow: 0 0 10px rgba(255, 140, 0, 0.5);
+        }
+        .input-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            padding: 5px;
+            width: 300px;
+            border-radius: 5px;
+            border: 1px solid #ff8c00;
+            background: #333;
+            color: #fff;
+        }
+        input[type="number"] {
+            padding: 5px;
+            width: 100px;
+            border-radius: 5px;
+            border: 1px solid #ff8c00;
+            background: #333;
+            color: #fff;
+        }
+        button {
+            padding: 5px 15px;
+            background: linear-gradient(45deg, #ff8c00, #e07b00);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            text-align: center;
+            font-size: 18px;
+            color: #ff8c00;
+            display: none;
+        }
+        #error {
+            text-align: center;
+            font-size: 18px;
+            color: #d32f2f;
+            display: none;
+        }
+        canvas {
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(255, 140, 0, 0.3);
+            background-color: #fff;
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+        }
+        .nft-container {
+            margin: 20px 0;
+            width: 80%;
+            max-width: 1000px;
+        }
+        .nft-container h2 {
+            font-size: 32px;
+            color: #ff8c00;
+            text-align: center;
+        }
+        #nftList {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .nft-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(255, 140, 0, 0.2);
+            text-align: center;
+        }
+        .nft-card.minted {
+            background: #444;
+            opacity: 0.7;
+        }
+        .nft-card p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .download-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            font-size: 14px;
+            background: linear-gradient(45deg, #ff8c00, #e07b00);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .download-btn:hover {
+            transform: scale(1.05);
+        }
+        #mintDetails {
+            margin-top: 20px;
+            width: 80%;
+            max-width: 1000px;
+            background: #333;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(255, 140, 0, 0.2);
+        }
+        #mintDetails h2 {
+            font-size: 24px;
+            color: #ff8c00;
+            text-align: center;
+        }
+        #mintLog {
+            font-size: 14px;
+            color: #fff;
+        }
+        @media (max-width: 768px) {
+            h1 { font-size: 32px; }
+            .input-container { flex-wrap: wrap; gap: 8px; }
+            input[type="text"] { width: 200px; }
+            input[type="number"] { width: 80px; }
+            button { padding: 3px 8px; font-size: 12px; }
+            canvas { max-width: 300px; }
+            .nft-container h2 { font-size: 24px; }
+            #nftList { grid-template-columns: 1fr; gap: 15px; }
+            .nft-card { padding: 10px; }
+            .nft-card p { font-size: 12px; }
+            .download-btn { padding: 6px 12px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Shibmap</h1>
+    </div>
+    <div class="input-container">
+        <input type="text" id="privateKey" placeholder="Enter Private Key (with 0x)">
+        <input type="number" id="gasLimit" placeholder="Gas Limit" value="300000">
+        <input type="number" id="gasPrice" placeholder="Gas Price (Gwei)" value="10">
+        <button onclick="startMinting()">Start Minting</button>
+    </div>
+    <div id="status"></div>
+    <div id="error"></div>
+    <div class="nft-container">
+        <h2>Shibmap NFTs</h2>
+        <div id="nftList"></div>
+    </div>
+    <div id="mintDetails">
+        <h2>Minting Details</h2>
+        <div id="mintLog"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+    <script>
+        let web3, account, contract;
+        const CONTRACT_ADDRESS = "0xeFb2986b14B5975ceD3692C10B66A84B07E998DE";
+        const CONTRACT_ABI = [{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"string","name":"uri","type":"string"},{"internalType":"string[]","name":"attributes","type":"string[]"},{"internalType":"uint256","name":"startBlock","type":"uint256"},{"internalType":"uint256","name":"endBlock","type":"uint256"}],"name":"mintNFT","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"string","name":"newURI","type":"string"},{"internalType":"string[]","name":"newAttributes","type":"string[]"}],"name":"updateTokenMetadata","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"tokenURI","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getTokenAttributes","outputs":[{"internalType":"string[]","name":"","type":"string[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"balanceOf","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"ownerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"safeTransferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"from","type":"address"},{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"transferFrom","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"to","type":"address"},{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"approve","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tokenId","type":"uint256"}],"name":"getApproved","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"operator","type":"address"},{"internalType":"bool","name":"approved","type":"bool"}],"name":"setApprovalForAll","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"tokenOwner","type":"address"},{"internalType":"address","name":"operator","type":"address"}],"name":"isApprovedForAll","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"name","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"symbol","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalSupply","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"groupId","type":"uint256"}],"name":"mintedGroups","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"string","name":"uri","type":"string"},{"indexed":false,"internalType":"string[]","name":"attributes","type":"string[]"}],"name":"Minted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tokenId","type":"uint256"},{"indexed":false,"internalType":"string","name":"newURI","type":"string"},{"indexed":false,"internalType":"string[]","name":"newAttributes","type":"string[]"}],"name":"MetadataUpdated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"}],"name":"OwnershipRenounced","type":"event"}];
+        const attributeCategories = {
+            ShibaBiome: ["Shiba Forest", "Shiba Desert", "Shiba Tundra", "Shiba Volcano", "Shiba Swamp", "Shiba Savanna", "Shiba Mountain", "Shiba Beach", "Shiba Plains", "Shiba Bamboo Grove"],
+            ShibaTerrain: ["Pawprint Sands", "Bone Dust", "Fur-Clad Rock", "Shiba Mud", "Tail-Trodden Grass", "Howlstone", "Bark Shale", "Woof Clay"],
+            ShibaTreasure: ["Chew Bone", "Shiba Coin", "Golden Leash", "Squeaky Toy", "Treat Stash", "Shiny Collar", "Paw Gem", "Tail Feather", "Bark Crystal", "Howl Shard", "Fur Diamond", "Woof Opal"],
+            ShibaRelic: ["Ancient Paw Print", "Shiba Totem", "Howl Tablet", "Bark Relic", "Woof Amulet", "Tail Carving", "Fur Scroll", "Shiba Fang", "Paw Statue", "Bone Shrine"],
+            ShibaSpirit: ["None", "Shiba Guardian", "Howl Spirit", "Bark Phantom", "Woof Wisp"],
+            ShibaWeather: ["Sunny Bark", "Rainy Howl", "Snowy Paw", "Foggy Tail", "Stormy Woof", "Windy Fur", "Misty Shiba", "Blazing Sun"],
+            ShibaTerritory: ["Puppy Patch", "Shiba Den", "Howl Hill", "Bark Valley", "Woof Plains", "Tail Kingdom"],
+            ShibaElement: ["Fire Bark", "Water Paw", "Earth Fur", "Wind Howl", "Thunder Tail", "Ice Woof", "Spirit Shiba"],
+            ShibaDanger: ["Safe Haven", "Mild Bark", "Risky Howl", "Dangerous Paw", "Wild Woof"],
+            ShibaRarity: ["Common Shiba", "Uncommon Bark", "Rare Howl", "Epic Paw", "Legendary Woof", "Mythic Tail", "Prime Fur", "Elite Shiba", "Celestial Bark", "Divine Howl"]
+        };
+        const attributeOrder = ["ShibaBiome", "ShibaTerrain", "ShibaTreasure", "ShibaRelic", "ShibaSpirit", "ShibaWeather", "ShibaTerritory", "ShibaElement", "ShibaDanger", "ShibaRarity"];
+        const attributeRanges = {
+            ShibaBiome: 2000,
+            ShibaTerrain: 2500,
+            ShibaTreasure: 1666,
+            ShibaRelic: 2000,
+            ShibaSpirit: 4000,
+            ShibaWeather: 2500,
+            ShibaTerritory: 3333,
+            ShibaElement: 2857,
+            ShibaDanger: 4000,
+            ShibaRarity: 2000
+        };
+        let nftCount = 0;
+
+        async function initializeWeb3() {
+            const privateKey = document.getElementById('privateKey').value.trim();
+            if (!privateKey.startsWith('0x') || privateKey.length !== 66) {
+                document.getElementById('error').textContent = "Invalid private key, must start with '0x' and be 64 characters long";
+                document.getElementById('error').style.display = 'block';
+                return false;
+            }
+            web3 = new Web3('https://www.shibrpc.com');
+            account = web3.eth.accounts.privateKeyToAccount(privateKey);
+            web3.eth.accounts.wallet.add(account);
+            contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+            return true;
+        }
+
+        async function findNextAvailableGroup() {
+            const currentBlock = await web3.eth.getBlockNumber();
+            const maxGroupId = Math.floor(currentBlock / 400);
+            for (let groupId = 0; groupId <= maxGroupId; groupId++) {
+                const isMinted = await contract.methods.mintedGroups(groupId).call();
+                if (!isMinted) {
+                    const startBlock = groupId * 400 + 1;
+                    const endBlock = startBlock + 399;
+                    return { groupId, startBlock, endBlock, minted: false };
+                }
+            }
+            return null;
+        }
+
+        async function fetchBlockData(blockNumber) {
+            const block = await web3.eth.getBlock(blockNumber);
+            const txCount = block.transactions.length;
+            return {
+                blockNumber: blockNumber,
+                txCount: Math.min(txCount, 500)
+            };
+        }
+
+        async function startMinting() {
+            const statusDiv = document.getElementById('status');
+            const errorDiv = document.getElementById('error');
+            const startButton = document.querySelector('.input-container button');
+
+            errorDiv.style.display = 'none';
+            statusDiv.style.display = 'block';
+            statusDiv.textContent = "Initializing...";
+            startButton.disabled = true;
+
+            if (!(await initializeWeb3())) {
+                statusDiv.style.display = 'none';
+                startButton.disabled = false;
+                return;
+            }
+
+            await mintNextNFT();
+        }
+
+        async function mintNextNFT() {
+            const statusDiv = document.getElementById('status');
+            const errorDiv = document.getElementById('error');
+            const mintLogDiv = document.getElementById('mintLog');
+
+            statusDiv.textContent = "Finding next available block group...";
+            const group = await findNextAvailableGroup();
+            if (!group) {
+                errorDiv.textContent = "No available block groups to mint";
+                errorDiv.style.display = 'block';
+                statusDiv.style.display = 'none';
+                document.querySelector('.input-container button').disabled = false;
+                return;
+            }
+
+            statusDiv.textContent = `Fetching blocks ${group.startBlock} to ${group.endBlock}...`;
+            const promises = [];
+            for (let i = group.startBlock; i <= group.endBlock; i++) {
+                promises.push(fetchBlockData(i));
+            }
+            const groupData = await Promise.all(promises);
+
+            const totalSupply = await contract.methods.totalSupply().call();
+            const tokenId = parseInt(totalSupply);
+            nftCount++;
+
+            statusDiv.textContent = `Generating NFT #${nftCount} (Token ID: ${tokenId})...`;
+            const { canvas, attributes } = generateNFT(group, groupData, tokenId);
+
+            await mintNFT(group, tokenId, canvas, attributes);
+            statusDiv.textContent = `NFT #${nftCount} minted, preparing next...`;
+            setTimeout(mintNextNFT, 1000);
+        }
+
+        function generateNFT(group, groupData, tokenId) {
+            const transactionCounts = groupData.map(block => block.txCount);
+            let attributes = [];
+            for (let i = 0; i < 10; i++) {
+                const segmentStart = i * 40;
+                const segmentEnd = segmentStart + 39;
+                const segmentTxCount = transactionCounts.slice(segmentStart, segmentEnd + 1).reduce((sum, count) => sum + count, 0);
+                const attributeName = attributeOrder[i];
+                const range = attributeRanges[attributeName];
+                const attributeIndex = Math.min(Math.floor(segmentTxCount / range), attributeCategories[attributeName].length - 1);
+                const attributeValue = attributeCategories[attributeName][attributeIndex];
+                attributes.push({ name: attributeName, value: attributeValue });
+            }
+
+            const nftListDiv = document.getElementById('nftList');
+            const card = document.createElement('div');
+            card.className = 'nft-card';
+            card.id = `nft-${nftCount}`;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = 500;
+            canvas.height = 500;
+
+            card.appendChild(canvas);
+            card.innerHTML += `<p><strong>NFT #${nftCount} (Token ID: ${tokenId}, Blocks: ${group.startBlock}-${group.endBlock}):</strong></p>` +
+                attributes.map(attr => `<p>${attr.name.replace(/([A-Z])/g, ' $1').trim()}: ${attr.value}</p>`).join('') +
+                `<button class="download-btn" onclick="downloadImage(${nftCount})">Download Image</button>`;
+            nftListDiv.appendChild(card);
+
+            generatePixelImage(canvas, groupData);
+            return { canvas, attributes };
+        }
+
+        function getColorForTxCount(txCount) {
+            if (txCount === 0) return '#FFFFFF';
+            else if (txCount <= 50) return '#D3D3D3';
+            else if (txCount <= 100) return '#FF6347';
+            else if (txCount <= 150) return '#FF4500';
+            else if (txCount <= 200) return '#FFFF00';
+            else if (txCount <= 250) return '#90EE90';
+            else if (txCount <= 300) return '#008000';
+            else if (txCount <= 350) return '#00CED1';
+            else if (txCount <= 400) return '#0000FF';
+            else if (txCount <= 450) return '#800080';
+            else return '#FFD700';
+        }
+
+        function generatePixelImage(canvas, groupData) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const transactionCounts = groupData.map(block => block.txCount);
+            const blockSize = 25;
+
+            for (let i = 0; i < 400; i++) {
+                const row = Math.floor(i / 20);
+                const col = i % 20;
+                const x = col * blockSize;
+                const y = row * blockSize;
+                const txCount = transactionCounts[i];
+                ctx.fillStyle = getColorForTxCount(txCount);
+                ctx.fillRect(x, y, blockSize, blockSize);
+            }
+        }
+
+        function downloadImage(nftIndex) {
+            const canvas = document.querySelector(`#nft-${nftIndex} canvas`);
+            const link = document.createElement('a');
+            link.download = `shibmap_nft_${nftIndex}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        async function mintNFT(group, tokenId, canvas, attributes) {
+            const statusDiv = document.getElementById('status');
+            const mintLogDiv = document.getElementById('mintLog');
+            const card = document.getElementById(`nft-${nftCount}`);
+
+            const gasLimit = parseInt(document.getElementById('gasLimit').value) || 300000;
+            const gasPrice = web3.utils.toWei(document.getElementById('gasPrice').value || '10', 'gwei');
+
+            statusDiv.textContent = `Minting NFT #${nftCount} (Token ID: ${tokenId})...`;
+
+            try {
+                const imageData = canvas.toDataURL("image/png").split(',')[1];
+                const metadata = {
+                    description: "A unique Shibmap NFT based on Shibarium blockchain data",
+                    image: `data:image/png;base64,${imageData}`,
+                    name: `Shibmap #${group.groupId}`,
+                    attributes: attributes.map(attr => ({
+                        trait_type: attr.name,
+                        value: attr.value
+                    }))
+                };
+                const tokenURI = `data:application/json;base64,${btoa(JSON.stringify(metadata))}`;
+                const attributeValues = attributes.map(attr => attr.value);
+
+                const tx = await contract.methods.mintNFT(tokenURI, attributeValues, group.startBlock, group.endBlock)
+                    .send({
+                        from: account.address,
+                        gas: gasLimit,
+                        gasPrice: gasPrice
+                    });
+
+                card.classList.add('minted');
+                card.innerHTML += `<p><strong>Status:</strong> Minted</p>`;
+                mintLogDiv.innerHTML += `<p style="color: #90EE90;">NFT #${nftCount} minted successfully, Tx Hash: ${tx.transactionHash}</p>`;
+            } catch (error) {
+                mintLogDiv.innerHTML += `<p style="color: #d32f2f;">NFT #${nftCount} minting failed: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

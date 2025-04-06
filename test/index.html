@@ -172,8 +172,8 @@
     </div>
     <div class="input-container">
         <input type="text" id="privateKey" placeholder="Enter Private Key (with 0x)">
-        <input type="number" id="gasLimit" placeholder="Gas Limit" value="300000">
-        <input type="number" id="gasPrice" placeholder="Gas Price (Gwei)" value="10">
+        <input type="number" id="gasLimit" placeholder="Gas Limit" value="500000">
+        <input type="number" id="gasPrice" placeholder="Gas Price (Gwei)" value="5">
         <button onclick="startMinting()">Start Minting</button>
     </div>
     <div id="blockRange"></div>
@@ -269,7 +269,7 @@
                     if (!isMinted) {
                         startBlock = groupId * 400 + 1;
                         endBlock = startBlock + 399;
-                        return { startBlock, endBlock };
+                        return { startBlock, endBlock, groupId };
                     }
                 }
                 return null;
@@ -390,7 +390,7 @@
             });
 
             nftCount++;
-            statusDiv.textContent = `Generating NFT #${nftCount}...`;
+            statusDiv.textContent = `Generating NFT #${nftCount} for blocks ${startBlock}-${endBlock}...`;
             calculateAttributes();
             generatePixelImage();
 
@@ -398,7 +398,7 @@
             canvas.style.display = 'block';
             downloadButton.style.display = 'inline-block';
 
-            await mintNFT();
+            await mintNFT(range.groupId);
             statusDiv.textContent = `NFT #${nftCount} minted, preparing next...`;
             setTimeout(mintNextNFT, 1000);
         }
@@ -406,19 +406,6 @@
         function calculateAttributes() {
             attributes = [];
             const transactionCounts = blockData.map(block => block.txCount);
-            const calcRules = {
-                ShibaBiome: "Based on blocks 1-40 transaction total (0-2000: Forest, 2000-4000: Desert, etc.)",
-                ShibaTerrain: "Based on blocks 41-80 transaction total (0-2500: Sands, 2500-5000: Dust, etc.)",
-                ShibaTreasure: "Based on blocks 81-120 transaction total (0-1666: Bone, 1666-3332: Coin, etc.)",
-                ShibaRelic: "Based on blocks 121-160 transaction total (0-2000: Print, 2000-4000: Totem, etc.)",
-                ShibaSpirit: "Based on blocks 161-200 transaction total (0-4000: None, 4000-8000: Guardian, etc.)",
-                ShibaWeather: "Based on blocks 201-240 transaction total (0-2500: Sunny, 2500-5000: Rainy, etc.)",
-                ShibaTerritory: "Based on blocks 241-280 transaction total (0-3333: Patch, 3333-6666: Den, etc.)",
-                ShibaElement: "Based on blocks 281-320 transaction total (0-2857: Fire, 2857-5714: Water, etc.)",
-                ShibaDanger: "Based on blocks 321-360 transaction total (0-4000: Safe, 4000-8000: Mild, etc.)",
-                ShibaRarity: "Based on blocks 361-400 transaction total (0-2000: Common, 2000-4000: Uncommon, etc.)"
-            };
-
             for (let i = 0; i < 10; i++) {
                 const groupStart = i * 40;
                 const groupEnd = groupStart + 39;
@@ -427,7 +414,7 @@
                 const range = attributeRanges[attributeName];
                 const attributeIndex = Math.min(Math.floor(groupTxCount / range), attributeCategories[attributeName].length - 1);
                 const attributeValue = attributeCategories[attributeName][attributeIndex];
-                attributes.push({ name: attributeName, value: attributeValue, rule: calcRules[attributeName] });
+                attributes.push({ name: attributeName, value: attributeValue });
             }
 
             const attributesList = document.getElementById('attributesList');
@@ -435,10 +422,7 @@
             attributes.forEach(attr => {
                 const card = document.createElement('div');
                 card.className = 'attribute-card';
-                card.innerHTML = `
-                    <p><strong>${attr.name.replace(/([A-Z])/g, ' $1').trim()}:</strong> ${attr.value}</p>
-                    <p style="font-size: 12px">${attr.rule}</p>
-                `;
+                card.innerHTML = `<p><strong>${attr.name.replace(/([A-Z])/g, ' $1').trim()}:</strong> ${attr.value}</p>`;
                 attributesList.appendChild(card);
             });
         }
@@ -461,7 +445,6 @@
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             const transactionCounts = blockData.map(block => block.txCount);
             const blockSize = 25;
-
             for (let i = 0; i < 400; i++) {
                 const row = Math.floor(i / 20);
                 const col = i % 20;
@@ -480,14 +463,14 @@
             link.click();
         }
 
-        async function mintNFT() {
+        async function mintNFT(groupId) {
             const statusDiv = document.getElementById('status');
             const mintLogDiv = document.getElementById('mintLog');
 
-            const gasLimit = parseInt(document.getElementById('gasLimit').value) || 300000;
-            const gasPrice = web3.utils.toWei(document.getElementById('gasPrice').value || '10', 'gwei');
+            const gasLimit = parseInt(document.getElementById('gasLimit').value) || 500000;
+            const gasPrice = web3.utils.toWei(document.getElementById('gasPrice').value || '5', 'gwei');
 
-            statusDiv.textContent = `Minting NFT #${nftCount}...`;
+            statusDiv.textContent = `Minting NFT #${nftCount} (Group ID: ${groupId})...`;
 
             try {
                 const totalSupply = await contract.methods.totalSupply().call();
@@ -495,7 +478,7 @@
 
                 const imageData = canvas.toDataURL("image/png").split(',')[1];
                 const metadata = {
-                    name: `Shibmap #${nftCount}`,
+                    name: `Shibmap #${tokenId}`,
                     description: "A unique Shibmap NFT based on Shibarium blockchain data",
                     image: `data:image/png;base64,${imageData}`,
                     attributes: attributes.map(attr => ({
@@ -513,9 +496,9 @@
                         gasPrice: gasPrice
                     });
 
-                mintLogDiv.innerHTML += `<p style="color: #90EE90;">NFT #${nftCount} minted successfully, Token ID: ${tokenId}, Tx Hash: ${tx.transactionHash}</p>`;
+                mintLogDiv.innerHTML += `<p style="color: #90EE90;">NFT #${nftCount} minted successfully, Token ID: ${tokenId}, Blocks: ${startBlock}-${endBlock}, Tx Hash: ${tx.transactionHash}</p>`;
             } catch (error) {
-                mintLogDiv.innerHTML += `<p style="color: #d32f2f;">NFT #${nftCount} minting failed: ${error.message}</p>`;
+                mintLogDiv.innerHTML += `<p style="color: #d32f2f;">NFT #${nftCount} minting failed, Blocks: ${startBlock}-${endBlock}: ${error.message}</p>`;
             }
         }
     </script>

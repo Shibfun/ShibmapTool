@@ -223,6 +223,7 @@
             rpcUrls: ['https://www.shibrpc.com'],
             blockExplorerUrls: ['https://shibariumscan.io']
         };
+        const DEPLOYMENT_BLOCK = 10220116;
 
         function showModal(message) {
             document.getElementById('modalMessage').innerHTML = message;
@@ -308,8 +309,8 @@
                     return;
                 }
 
-                // Fetch Transfer events
-                const fromBlock = 0; // Ideally set to contract deployment block
+                // Fetch Transfer events from deployment block
+                const fromBlock = DEPLOYMENT_BLOCK;
                 const toBlock = 'latest';
                 const transferEventsTo = await contract.getPastEvents('Transfer', {
                     filter: { to: accounts[0] },

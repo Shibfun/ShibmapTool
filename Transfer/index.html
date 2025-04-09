@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Shibmap Collection</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Montserrat', Arial, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            color: #fff;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        h1 {
+            font-size: 48px;
+            color: #ff8c00;
+            text-shadow: 0 0 10px rgba(255, 140, 0, 0.5);
+        }
+        .wallet-info {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background: linear-gradient(45deg, #ff8c00, #e07b00);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.05);
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        button.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        #loading, #error {
+            text-align: center;
+            font-size: 18px;
+            color: #ff8c00;
+            display: none;
+        }
+        #error {
+            color: #d32f2f;
+        }
+        .nft-container {
+            margin: 20px 0;
+            width: 80%;
+            max-width: 1000px;
+        }
+        .nft-container h2 {
+            font-size: 32px;
+            color: #ff8c00;
+            text-align: center;
+        }
+        #nftList {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+        .nft-card {
+            background: #333;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(255, 140, 0, 0.2);
+            text-align: center;
+        }
+        .nft-card img {
+            max-width: 100%;
+            border-radius: 10px;
+        }
+        .nft-card p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .transfer-input {
+            margin: 10px 0;
+            padding: 8px;
+            width: 80%;
+            border: none;
+            border-radius: 5px;
+            background: #444;
+            color: #fff;
+        }
+        .transfer-btn {
+            margin-top: 10px;
+            padding: 8px 16px;
+            font-size: 14px;
+            background: linear-gradient(45deg, #ff8c00, #e07b00);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .transfer-btn:hover {
+            transform: scale(1.05);
+        }
+        .transfer-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .transfer-btn.loading {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            color: #fff;
+            max-width: 350px;
+            border: 2px solid #ff8c00;
+            box-shadow: 0 0 20px rgba(255, 140, 0, 0.5);
+        }
+        .modal-content p {
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .modal-content button {
+            padding: 10px 20px;
+            background: #ff8c00;
+            color: #1a1a1a;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        @media (max-width: 768px) {
+            h1 { font-size: 32px; }
+            .nft-container h2 { font-size: 24px; }
+            #nftList { grid-template-columns: 1fr; gap: 15px; }
+            .nft-card { padding: 10px; }
+            .nft-card p { font-size: 12px; }
+            .transfer-btn { padding: 6px 12px; font-size: 12px; }
+            .modal-content { max-width: 90%; padding: 15px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>My Shibmap Collection</h1>
+        <div class="wallet-info">
+            Wallet: <span id="walletAddress">Not connected</span>
+        </div>
+        <button id="connectWalletBtn" class="action-btn">Connect Wallet</button>
+    </div>
+    <div id="loading">Loading NFTs...</div>
+    <div id="error"></div>
+    <div class="nft-container">
+        <h2>Your Shibmap NFTs</h2>
+        <div id="nftList"></div>
+    </div>
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <p id="modalMessage"></p>
+            <button onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+    <script>
+        let web3, accounts, contract;
+        const CONTRACT_ADDRESS = "0xeFb2986b14B5975ceD3692C10B66A84B07E998DE";
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "stateMutability": "nonpayable",
+                "type": "constructor"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "owner",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "approved",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "Approval",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "owner",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "operator",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "bool",
+                        "name": "approved",
+                        "type": "bool"
+                    }
+                ],
+                "name": "ApprovalForAll",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "uri",
+                        "type": "string"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string[]",
+                        "name": "attributes",
+                        "type": "string[]"
+                    }
+                ],
+                "name": "Minted",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string",
+                        "name": "newURI",
+                        "type": "string"
+                    },
+                    {
+                        "indexed": false,
+                        "internalType": "string[]",
+                        "name": "newAttributes",
+                        "type": "string[]"
+                    }
+                ],
+                "name": "MetadataUpdated",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "previousOwner",
+                        "type": "address"
+                    }
+                ],
+                "name": "OwnershipRenounced",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "indexed": true,
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "Transfer",
+                "type": "event"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "approve",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "user",
+                        "type": "address"
+                    }
+                ],
+                "name": "balanceOf",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "getApproved",
+                "outputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "getTokenAttributes",
+                "outputs": [
+                    {
+                        "internalType": "string[]",
+                        "name": "",
+                        "type": "string[]"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "tokenOwner",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "operator",
+                        "type": "address"
+                    }
+                ],
+                "name": "isApprovedForAll",
+                "outputs": [
+                    {
+                        "internalType": "bool",
+                        "name": "",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "string",
+                        "name": "uri",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string[]",
+                        "name": "attributes",
+                        "type": "string[]"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "startBlock",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "endBlock",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "mintNFT",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "groupId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "mintedGroups",
+                "outputs": [
+                    {
+                        "internalType": "bool",
+                        "name": "",
+                        "type": "bool"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "name",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "",
+                        "type": "string"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "ownerOf",
+                "outputs": [
+                    {
+                        "internalType": "address",
+                        "name": "",
+                        "type": "address"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "renounceOwnership",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "bytes",
+                        "name": "data",
+                        "type": "bytes"
+                    }
+                ],
+                "name": "safeTransferFrom",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "safeTransferFrom",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "operator",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "approved",
+                        "type": "bool"
+                    }
+                ],
+                "name": "setApprovalForAll",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "symbol",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "",
+                        "type": "string"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "tokenURI",
+                "outputs": [
+                    {
+                        "internalType": "string",
+                        "name": "",
+                        "type": "string"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "totalSupply",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "address",
+                        "name": "from",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "address",
+                        "name": "to",
+                        "type": "address"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    }
+                ],
+                "name": "transferFrom",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "tokenId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "string",
+                        "name": "newURI",
+                        "type": "string"
+                    },
+                    {
+                        "internalType": "string[]",
+                        "name": "newAttributes",
+                        "type": "string[]"
+                    }
+                ],
+                "name": "updateTokenMetadata",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            }
+        ];
+        const shibariumMainnet = {
+            chainId: 109,
+            chainName: 'Shibarium',
+            nativeCurrency: { name: 'BONE', symbol: 'BONE', decimals: 18 },
+            rpcUrls: ['https://www.shibrpc.com'],
+            blockExplorerUrls: ['https://shibariumscan.io']
+        };
+
+        function showModal(message) {
+            document.getElementById('modalMessage').innerHTML = message;
+            document.getElementById('modal').style.display = 'flex';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+        }
+
+        async function connectWallet() {
+            const connectButton = document.getElementById('connectWalletBtn');
+            if (!window.ethereum) {
+                showModal('No wallet detected. Please install <a href="https://metamask.io" target="_blank">MetaMask</a>.');
+                return;
+            }
+            connectButton.classList.add('loading');
+            web3 = new Web3(window.ethereum);
+            accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+            if (!accounts.length) {
+                showModal('Please unlock your wallet or connect it.');
+                connectButton.classList.remove('loading');
+                return;
+            }
+            const chainId = await web3.eth.getChainId();
+            if (chainId !== 109) {
+                try {
+                    await window.ethereum.request({
+                        method: 'wallet_switchEthereumChain',
+                        params: [{ chainId: web3.utils.numberToHex(109) }]
+                    });
+                } catch (switchError) {
+                    if (switchError.code === 4902) {
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [shibariumMainnet]
+                        });
+                    } else {
+                        showModal('Failed to switch network. Please add Shibarium manually.');
+                        connectButton.classList.remove('loading');
+                        return;
+                    }
+                }
+            }
+            contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+            showModal('Connected to Shibarium successfully!');
+            updateWalletAddress();
+            fetchOwnedNFTs();
+            connectButton.classList.remove('loading');
+        }
+
+        async function updateWalletAddress() {
+            if (!accounts) {
+                document.getElementById('walletAddress').innerText = 'Not connected';
+            } else {
+                const shortAddress = `${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`;
+                document.getElementById('walletAddress').innerText = shortAddress;
+            }
+        }
+
+        async function fetchOwnedNFTs() {
+            if (!contract || !accounts) {
+                showModal('Please connect your wallet first!');
+                return;
+            }
+
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('error');
+            const nftListDiv = document.getElementById('nftList');
+
+            errorDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            nftListDiv.innerHTML = '';
+
+            try {
+                const balance = await contract.methods.balanceOf(accounts[0]).call();
+                if (balance == 0) {
+                    errorDiv.textContent = 'No Shibmap NFTs found in your wallet.';
+                    errorDiv.style.display = 'block';
+                    loadingDiv.style.display = 'none';
+                    return;
+                }
+
+                const totalSupply = await contract.methods.totalSupply().call();
+                let ownedTokenIds = [];
+
+                // Check ownership for each tokenId up to totalSupply
+                for (let tokenId = 0; tokenId < totalSupply; tokenId++) {
+                    try {
+                        const owner = await contract.methods.ownerOf(tokenId).call();
+                        if (owner.toLowerCase() === accounts[0].toLowerCase()) {
+                            ownedTokenIds.push(tokenId);
+                        }
+                    } catch (e) {
+                        // Token may not exist, skip
+                        continue;
+                    }
+                }
+
+                for (let tokenId of ownedTokenIds) {
+                    await displayNFT(tokenId);
+                }
+
+                if (ownedTokenIds.length === 0) {
+                    errorDiv.textContent = 'No Shibmap NFTs found in your wallet.';
+                    errorDiv.style.display = 'block';
+                }
+
+                loadingDiv.style.display = 'none';
+            } catch (error) {
+                errorDiv.textContent = 'Error fetching NFTs: ' + error.message;
+                errorDiv.style.display = 'block';
+                loadingDiv.style.display = 'none';
+            }
+        }
+
+        async function displayNFT(tokenId) {
+            try {
+                const tokenURI = await contract.methods.tokenURI(tokenId).call();
+                const attributes = await contract.methods.getTokenAttributes(tokenId).call();
+
+                // Parse tokenURI (assuming it's a base64-encoded JSON)
+                let metadata = {};
+                if (tokenURI.startsWith('data:application/json;base64,')) {
+                    const base64Data = tokenURI.split(',')[1];
+                    metadata = JSON.parse(atob(base64Data));
+                }
+
+                const nftListDiv = document.getElementById('nftList');
+                const card = document.createElement('div');
+                card.className = 'nft-card';
+                card.id = `nft-${tokenId}`;
+
+                let imageHTML = '';
+                if (metadata.image) {
+                    imageHTML = `<img src="${metadata.image}" alt="Shibmap #${tokenId}" />`;
+                }
+
+                card.innerHTML = `
+                    ${imageHTML}
+                    <p><strong>Shibmap #${tokenId}</strong></p>
+                    ${attributes.map((attr, index) => `<p>Attribute ${index + 1}: ${attr}</p>`).join('')}
+                    <input type="text" class="transfer-input" id="transfer-address-${tokenId}" placeholder="Recipient address (0x...)" />
+                    <button class="transfer-btn" onclick="transferNFT(${tokenId})">Transfer NFT</button>
+                `;
+                nftListDiv.appendChild(card);
+            } catch (error) {
+                console.error(`Error displaying NFT ${tokenId}:`, error);
+            }
+        }
+
+        async function transferNFT(tokenId) {
+            if (!web3 || !contract || !accounts) {
+                showModal('Please connect your wallet first!');
+                return;
+            }
+
+            const transferInput = document.getElementById(`transfer-address-${tokenId}`);
+            const transferButton = document.querySelector(`#nft-${tokenId} .transfer-btn`);
+            const toAddress = transferInput.value.trim();
+
+            if (!web3.utils.isAddress(toAddress)) {
+                showModal('Please enter a valid Ethereum address.');
+                return;
+            }
+
+            transferButton.disabled = true;
+            transferButton.classList.add('loading');
+
+            try {
+                showModal(`Initiating transfer of Shibmap #${tokenId} to ${toAddress.slice(0, 6)}... Please confirm in your wallet.`);
+                await contract.methods.safeTransferFrom(accounts[0], toAddress, tokenId).send({ from: accounts[0] });
+                showModal(`Shibmap #${tokenId} transferred successfully to ${toAddress.slice(0, 6)}...!`);
+                document.getElementById(`nft-${tokenId}`).remove();
+                const remainingCards = document.querySelectorAll('.nft-card').length;
+                if (remainingCards === 0) {
+                    document.getElementById('error').textContent = 'No Shibmap NFTs found in your wallet.';
+                    document.getElementById('error').style.display = 'block';
+                }
+            } catch (error) {
+                showModal('Transfer failed: ' + error.message);
+                transferButton.disabled = false;
+                transferButton.classList.remove('loading');
+            }
+        }
+
+        window.onload = () => {
+            if (!window.location.protocol.startsWith('http')) {
+                showModal('Please run this page via a local server (e.g., "npx serve") to connect MetaMask.');
+            } else if (!window.ethereum) {
+                showModal('No wallet detected. Please install <a href="https://metamask.io" target="_blank">MetaMask</a>.');
+            }
+        };
+
+        window.ethereum?.on('chainChanged', (chainId) => {
+            if (parseInt(chainId, 16) !== 109) {
+                showModal('Switched to wrong network. Please reconnect to Shibarium.');
+                web3 = null;
+                contract = null;
+                accounts = null;
+                updateWalletAddress();
+                document.getElementById('nftList').innerHTML = '';
+            } else {
+                connectWallet();
+            }
+        });
+
+        window.ethereum?.on('accountsChanged', (newAccounts) => {
+            if (newAccounts.length) {
+                connectWallet();
+            } else {
+                showModal('Wallet disconnected. Please reconnect.');
+                web3 = null;
+                contract = null;
+                accounts = null;
+                updateWalletAddress();
+                document.getElementById('nftList').innerHTML = '';
+            }
+        });
+
+        document.getElementById('connectWalletBtn').addEventListener('click', connectWallet);
+    </script>
+</body>
+</html>
